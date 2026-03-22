@@ -582,7 +582,7 @@ const el = {
 let appState = null, editMode = 'none', filterMode='all', saveTimer=null, undoStack=[], inputUndoTimers={};
 let cloudSaveTimer = null;
 let cloudSaveEnabled = true;
-
+let cloudLoadInProgress = false;
 function schedulePersist(){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(persistState,120);
@@ -620,6 +620,28 @@ function ensureShape(){
   });
 }
 function persistState(){ captureState(); localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); }
+  async function loadFromCloud(){
+  if(cloudLoadInProgress) return;
+  cloudLoadInProgress = true;
+
+  try{
+    const res = await fetch('/api/load', { cache: 'no-store' });
+    const payload = await res.json();
+
+    if(payload && payload.ok && payload.data){
+      appState = payload.data;
+      ensureShape();
+      refreshTop();
+      renderShow();
+      persistState();
+      updateUndoButton();
+    }
+  }catch(e){
+    console.error('Cloud load failed', e);
+  }finally{
+    cloudLoadInProgress = false;
+  }
+}
 function scheduleCloudSave(){
   if(!cloudSaveEnabled) return;
   clearTimeout(cloudSaveTimer);
@@ -1177,11 +1199,12 @@ function wireEvents(){
   el.categories.addEventListener('keydown', e=>{ const addInp=e.target.closest('[data-role="add-item-input"]'); if(addInp && e.key==='Enter'){ e.preventDefault(); addItem(addInp.dataset.sec, addInp); } });
   window.addEventListener('beforeunload', captureState);
 }
-function boot(){
+async function boot(){
   let raw=null;
   try{ raw=JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch(e){}
   appState = raw || clone(FALLBACK_DATA);
   ensureShape(); wireEvents(); refreshTop(); renderShow(); persistState(); updateUndoButton();
+  await loadFromCloud();
 }
 boot();
 })();
