@@ -580,8 +580,14 @@ const el = {
 };
 
 let appState = null, editMode = 'none', filterMode='all', saveTimer=null, undoStack=[], inputUndoTimers={};
+let cloudSaveTimer = null;
+let cloudSaveEnabled = true;
 
-function schedulePersist(){ clearTimeout(saveTimer); saveTimer=setTimeout(persistState,120); }
+function schedulePersist(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(persistState,120);
+  scheduleCloudSave();
+}
 function pushUndoState(){ try{ undoStack.push(clone(appState)); if(undoStack.length>80) undoStack.shift(); }catch(e){} updateUndoButton(); }
 function updateUndoButton(){ el.undoBtn.disabled = undoStack.length===0; }
 function undoLastAction(){ if(!undoStack.length) return; appState = undoStack.pop(); ensureShape(); refreshTop(); renderShow(); persistState(); updateUndoButton(); }
@@ -614,6 +620,24 @@ function ensureShape(){
   });
 }
 function persistState(){ captureState(); localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); }
+function scheduleCloudSave(){
+  if(!cloudSaveEnabled) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(saveToCloud, 1200);
+}
+
+async function saveToCloud(){
+  try{
+    captureState();
+    await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(appState)
+    });
+  }catch(e){
+    console.error('Cloud save failed', e);
+  }
+}  
 function getShowData(){ return appState.showData[appState.active] ||= defaultShowState(); }
 function getActiveShow(){ return appState.shows.find(s=>s.id===appState.active) || null; }
 function getAllTabs(){ return appState.master.tabs || []; }
